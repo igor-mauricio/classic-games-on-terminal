@@ -5,16 +5,26 @@ import (
 	"math/rand"
 )
 
-type tile struct {
+type Minesweeper interface {
+	NewGame(rows, cols int, dif difficulty) error
+	Reveal() (gameStatus, error)
+	ToggleFlag() error
+	Render() string
+	MoveTo(dir direction) error
+}
+
+type Game struct {
+	Positions [][]cell
+	Status    gameStatus
+	pos       struct{ row, col int }
+	size      struct{ rows, cols int }
+}
+
+type cell struct {
 	nearbyBombs int
 	isBomb      bool
 	isRevealed  bool
 	isFlagged   bool
-}
-
-type Field struct {
-	Positions [][]tile
-	Status    gameStatus
 }
 
 type difficulty int
@@ -33,8 +43,8 @@ const (
 	DEFEAT
 )
 
-func (g gameStatus) toString() string {
-	switch g {
+func (status gameStatus) toString() string {
+	switch status {
 	case PLAYING:
 		return "Playing"
 	case VICTORY:
@@ -44,13 +54,29 @@ func (g gameStatus) toString() string {
 	default:
 		return ""
 	}
-
 }
 
-func NewField(rows, cols int, dif difficulty) Field {
-	f := Field{
-		Positions: make([][]tile, rows),
+func Create(rows, cols int, dif difficulty) Minesweeper {
+	g := &Game{}
+	g.NewGame(rows, cols, dif)
+	return g
+}
+
+func (g *Game) NewGame(rows, cols int, dif difficulty) error {
+	if rows < 0 || cols < 0 {
+		return fmt.Errorf("out of bounds")
 	}
+	g.Positions = make([][]cell, rows)
+	g.Status = PLAYING
+	g.pos = struct {
+		row int
+		col int
+	}{0, 0}
+	g.size = struct {
+		rows int
+		cols int
+	}{rows, cols}
+
 	var bombPercent float32
 	switch dif {
 	case EASY:
@@ -62,10 +88,10 @@ func NewField(rows, cols int, dif difficulty) Field {
 	default:
 		bombPercent = 0.4
 	}
-	for i := range f.Positions {
-		f.Positions[i] = make([]tile, cols)
-		for j := range f.Positions[i] {
-			f.Positions[i][j] = tile{
+	for i := range g.Positions {
+		g.Positions[i] = make([]cell, cols)
+		for j := range g.Positions[i] {
+			g.Positions[i][j] = cell{
 				isBomb:      rand.Float32() < bombPercent,
 				isRevealed:  false,
 				isFlagged:   false,
@@ -73,98 +99,92 @@ func NewField(rows, cols int, dif difficulty) Field {
 			}
 		}
 	}
-	f.parseNeighbourBombs()
-	return f
-}
-
-func (f *Field) ToggleFlag(row, col int) error {
-	if f.Status != PLAYING {
-		return fmt.Errorf("game finished")
-	}
-	f.Positions[row][col].isFlagged = !f.Positions[row][col].isFlagged
-	f.checkWin()
+	g.parseNeighbourBombs()
 	return nil
 }
 
-func (f *Field) RevealAt(row, col int) error {
-	if f.Status != PLAYING {
+func (g *Game) ToggleFlag() error {
+	return g.toggleFlagAt(g.pos.row, g.pos.col)
+}
+
+func (g *Game) toggleFlagAt(row, col int) error {
+	if g.Status != PLAYING {
 		return fmt.Errorf("game finished")
 	}
-	defer f.checkWin()
-	if row < 0 || col < 0 || row >= len(f.Positions) || col >= len(f.Positions[0]) {
+	g.Positions[row][col].isFlagged = !g.Positions[row][col].isFlagged
+	g.checkWin()
+	return nil
+}
+
+func (g *Game) Reveal() (gameStatus, error) {
+	return g.revealAt(g.pos.row, g.pos.col)
+}
+
+func (g *Game) revealAt(row, col int) (gameStatus, error) {
+	if g.Status != PLAYING {
+		return g.Status, fmt.Errorf("game finished")
+	}
+	defer g.checkWin()
+	g.Positions[row][col].isRevealed = true
+	if g.Positions[row][col].isBomb || g.Positions[row][col].nearbyBombs != 0 {
+		return g.Status, nil
+	}
+	dxList := []int{-1, 0, 1}
+	dyList := []int{-1, 0, 1}
+	for _, dx := range dxList {
+		i := row + dx
+		if i < 0 || i > len(g.Positions)-1 {
+			continue
+		}
+		for _, dy := range dyList {
+			j := col + dy
+			if j < 0 || j > len(g.Positions[i])-1 || g.Positions[i][j].isRevealed {
+				continue
+			}
+			g.revealAt(i, j)
+		}
+	}
+	return g.Status, nil
+}
+
+type direction struct{ dx, dy int }
+
+var (
+	UP    = direction{dx: 0, dy: -1}
+	DOWN  = direction{dx: 0, dy: 1}
+	LEFT  = direction{dx: -1, dy: 0}
+	RIGHT = direction{dx: 1, dy: 0}
+)
+
+func (g *Game) MoveTo(dir direction) error {
+	row := g.pos.row + dir.dy
+	col := g.pos.col + dir.dx
+	if row < 0 || col < 0 || row >= g.size.rows || col >= g.size.cols {
 		return fmt.Errorf("out of bounds")
 	}
-	f.Positions[row][col].isRevealed = true
-	if f.Positions[row][col].isBomb || f.Positions[row][col].nearbyBombs != 0 {
-		return nil
-	}
-	dxList := []int{-1, 0, 1}
-	dyList := []int{-1, 0, 1}
-	for _, dx := range dxList {
-		i := row + dx
-		if i < 0 || i > len(f.Positions)-1 {
-			continue
-		}
-		for _, dy := range dyList {
-			j := col + dy
-			if j < 0 || j > len(f.Positions[i])-1 || f.Positions[i][j].isRevealed {
-				continue
-			}
-			f.RevealAt(i, j)
-		}
-	}
+	g.pos.row = row
+	g.pos.col = col
 	return nil
 }
 
-func (f *Field) parseNeighbourBombs() {
-	for i := range f.Positions {
-		for j := range f.Positions[0] {
-			f.Positions[i][j].nearbyBombs = f.getNeighbourBombCount(i, j)
-		}
-	}
-}
-
-func (f Field) getNeighbourBombCount(row, col int) int {
-	dxList := []int{-1, 0, 1}
-	dyList := []int{-1, 0, 1}
-	count := 0
-
-	for _, dx := range dxList {
-		i := row + dx
-		if i < 0 || i > len(f.Positions)-1 {
-			continue
-		}
-		for _, dy := range dyList {
-			j := col + dy
-			if j < 0 || j > len(f.Positions[i])-1 {
-				continue
-			}
-			if f.Positions[i][j].isBomb {
-				count++
-			}
-		}
-	}
-	return count
-}
-
-func (f *Field) checkWin() {
+func (g *Game) checkWin() {
 	stillPlaying := false
 
-	for i := range f.Positions {
-		for j := range f.Positions[i] {
-			if f.Positions[i][j].isBomb && f.Positions[i][j].isRevealed {
-				f.Status = DEFEAT
+	for i := range g.Positions {
+		for j := range g.Positions[i] {
+			if g.Positions[i][j].isBomb && g.Positions[i][j].isRevealed {
+				g.Status = DEFEAT
 				return
 			}
-			if f.Positions[i][j].isBomb && !f.Positions[i][j].isFlagged ||
-				!f.Positions[i][j].isBomb && !f.Positions[i][j].isRevealed {
+			if g.Positions[i][j].isBomb && !g.Positions[i][j].isFlagged ||
+				!g.Positions[i][j].isBomb && !g.Positions[i][j].isRevealed {
 				stillPlaying = true
 			}
 		}
 	}
 	if stillPlaying {
-		f.Status = PLAYING
+		g.Status = PLAYING
 		return
 	}
-	f.Status = VICTORY
+	g.Status = VICTORY
 }

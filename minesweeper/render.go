@@ -21,19 +21,19 @@ var (
 			Background(lipgloss.Color("#FF0000"))
 )
 
-func (f Field) Render(currentX, currentY int) string {
+func (f Game) Render() string {
 	switch f.Status {
 	case VICTORY:
 		return f.victoryScreen()
 	case DEFEAT:
 		return f.defeatScreen()
 	case PLAYING:
-		return f.gameScreen(currentX, currentY)
+		return f.gameScreen()
 	}
 	return ""
 }
 
-func (f Field) victoryScreen() string {
+func (f Game) victoryScreen() string {
 	result := ""
 	victoryMessage := lipgloss.NewStyle().
 		Width(60).
@@ -46,7 +46,7 @@ func (f Field) victoryScreen() string {
 	return result
 }
 
-func (f Field) defeatScreen() string {
+func (f Game) defeatScreen() string {
 	result := ""
 	victoryMessage := lipgloss.NewStyle().
 		Width(60).
@@ -54,12 +54,12 @@ func (f Field) defeatScreen() string {
 		Align(lipgloss.Center, lipgloss.Center).
 		Bold(true).
 		Background(lipgloss.Color("#3D3634")).
-		Foreground(lipgloss.Color("#00FF00"))
-	result += victoryMessage.Render("Defeat")
+		Foreground(lipgloss.Color("#FF0000"))
+	result += victoryMessage.Render("Defeat\nPress enter to retry")
 	return result
 }
 
-func (f Field) gameScreen(currentX, currentY int) string {
+func (f Game) gameScreen() string {
 	result := ""
 	for i := range f.Positions {
 		for j := range f.Positions[i] {
@@ -82,7 +82,7 @@ func (f Field) gameScreen(currentX, currentY int) string {
 					text = strconv.Itoa(f.Positions[i][j].nearbyBombs)
 				}
 			}
-			if currentY == i && currentX == j {
+			if f.pos.row == i && f.pos.col == j {
 				style = style.Background(lipgloss.Color("#FFFFFF"))
 			}
 			result += style.Padding(0, 1).Render(text)
