@@ -14,7 +14,7 @@
 #define CONHECIDO 1
 #define DESCONHECIDO 0
 
-#define FRA 1
+#define FRA 0
 
 // Campo
 int campo[DIMENSAO_X][DIMENSAO_Y][2];
@@ -29,8 +29,8 @@ int checar_pontuacao();
 
 int main()
 {
-
     int linha, coluna, inspecao;
+    char coluna_char;
     srand(time(NULL));
     inicializar_campo();
 
@@ -43,8 +43,11 @@ int main()
         else
             printf("Digite as coordenadas da posicao que que voce quer checar:\nPor exemplo: b5\n-");
 
-        scanf(" %c%d", &coluna, &linha);
-        coluna = coluna - 'a';
+        scanf(" %c%d", &coluna_char, &linha);
+        coluna = coluna_char - 'a';
+        linha -= 1; // Adjust for 0-based index
+        // printf("%c %d \n", coluna_char, linha + 1);
+
         // Checando o que tem na posi��o inserida
         if (linha >= 0 && linha < DIMENSAO_X && coluna >= 0 && coluna < DIMENSAO_Y)
         {
@@ -133,7 +136,7 @@ void inicializar_campo()
 }
 
 // Mostrar a matriz na tela de acordo com o que foi descoberto
-void visualizar_campo(int estado = 1)
+void visualizar_campo(int estado)
 {
     system("cls");
 
@@ -211,7 +214,7 @@ int checar_mina(int pos_x, int pos_y)
         return 0;
     }
     else
-    {
+    { 
         return BOMBA;
     }
 }
